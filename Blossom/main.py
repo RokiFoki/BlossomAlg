@@ -85,9 +85,11 @@ def get_trace(v):
 
 
 def contract(trace_1, trace_2):
+  global blossum_index
   i = 0
   while trace_1[i] == trace_2[i]: i += 1
-
+  i -= 1
+  
   v = trace_1[i]
 
   blossum_path_1 = trace_1[i:]
@@ -97,27 +99,36 @@ def contract(trace_1, trace_2):
   p[blossum_index] = p[v]
 
   graph[blossum_index] = set()
-  for ver in blossum_verticles:
+  for ver in blossum_verticles[blossum_index]:
     verticle_blossum[ver] = blossum_index
 
     graph[blossum_index].update(graph[ver])
 
+  if v in mate:
+    printDebug('updating match:', blossum_index, '->', mate[v])
+    mate[blossum_index] = mate[v]
+    mate[mate[v]] = blossum_index
+ 
   blossum_index += 1
 
 
 def lift(path):
+  printDebug('lifting: path', path)
   lifted_path = []
 
-  path_len = len(path)
   i = 0
-  while path_len - i >= 2:
+  while len(path) - i >= 2:
     z = path[i]
+    printDebug('lifting: checking', z)
     if z < n: 
       lifted_path.append(z)
+      printDebug('lifting: (not glossom) lifted_path', lifted_path)
+      i += 1
       continue
 
     b_index = z
     w = path[i+1]
+    printDebug('lifting: (glossom):', blossum_verticles[b_index])
 
     start = None
     end = None
@@ -139,14 +150,26 @@ def lift(path):
           end = blossum_verticles[b_index].index(ver)
 
       diff = 1 if end % 2 == 1 else k - 1
-    
+
+    printDebug('lifting: z:', z, 'start:', start, 'end:', end, 'diff:', diff)
+ 
     k = len(blossum_verticles[b_index])
     while start != end:
+      printDebug('lifting: adding', blossum_verticles[b_index][start])
       path.append(blossum_verticles[b_index][start])
       start = (start + diff) % k
-
+      
     path.append(blossum_verticles[b_index][start])
-    return lifted_path
+
+    printDebug('lifting: (glossom) lifted_path', lifted_path, 'path:', path)
+
+    if b_index in mate: # do we need it
+      mate[mate[b_index]] = blossum_verticles[b_index][0] # do we need it
+    # do we need to reduce the blossum_index?
+   
+    i += 1
+  
+  return lifted_path
 
 p = None
 def find_augmenting_path(): 
@@ -171,7 +194,7 @@ def find_augmenting_path():
       q.append(v)
   
   i = 0
-  printDebug('extended verticles:', q)
+  printDebug('\nextended verticles:', q)
   while i < len(q): 
     v = q[i]; i += 1
     printDebug('v:', v, '(extended verticle)')
@@ -181,10 +204,15 @@ def find_augmenting_path():
       printDebug('skipping:', v, ':', depth % 2 == 1, verticles_marked[v])
       continue
 
-    for w in graph[v]:
+    neighbours = graph[v]
+    if debug: 
+      neighbours = list(graph[v])
+      neighbours.sort()
+
+    for w in neighbours:
       printDebug("w:", w, "(v's neighbour)")
       while verticle_blossum[w] != -1: w = verticle_blossum[w]
-      printDebug("(w) finding it's blossum if it is in one:", w)
+      printDebug("(w) finding its blossum if it is in one:", w)
 
       if edges_marked[v][w]: 
         printDebug("(w) edge was already processed")
@@ -198,12 +226,15 @@ def find_augmenting_path():
         p[x] = w
         forest_nodes.add(w)
         forest_nodes.add(x)
+
+        printDebug('updatedTreePath:', get_trace(x) if debug else None)
+
         q.append(x) # only even ones need to be processed
       else:
         printDebug("(w) it is in the forest")
         if get_depth(w) % 2 == 1:
           i += 1
-          printDebug("(w) its depth is odd")
+          printDebug("(w) its depth is odd. Skipping")
           continue
         else:
           printDebug("(w) its depth is even")
@@ -212,15 +243,17 @@ def find_augmenting_path():
           trace_w = get_trace(w)
           printDebug("(trace w)", trace_w)
           if trace_v[0] != trace_w[0]:
-            printDebug("(v, w), not same root")
+            printDebug("(v, w) don't have same root")
             path = trace_v + reversed(trace_w)
 
             printDebug('augmented path found:', path)
             return path
           else:
+            printDebug('(v,w) have same root, contracting')
             contract(trace_v, trace_w)
             # todo: new graph, new mates
             path = find_augmenting_path()
+            printDebug('(v,w) path after contraction:', path)
             
             return lift(path)
       
@@ -237,12 +270,18 @@ def augment(path):
   while i + 1 < len(path):
     mate[path[i]] = path[i+1]
     mate[path[i+1]] = path[i]
-    printDebug('new matching:', path[i], '->', path[i+1])
+    printDebug('new matching pair:', path[i], '->', path[i+1])
 
     i += 2
 
 def mathching_to_string():
-  return mate
+  if not debug: return None
+  keys = []
+
+  for key in mate:
+    if int(key) < mate[key]: keys.append(str(key) + '->' + str(mate[key]))
+  return ', '.join(keys)
+  
 
 res = 0
 def find_maximum_matching(_debug=False):
@@ -254,7 +293,10 @@ def find_maximum_matching(_debug=False):
     augment(path)
     printDebug('new matching:', mathching_to_string())
     res += 2
-    return find_maximum_matching()
+    return find_maximum_matching(_debug)
+  
+  printDebug('no path found:', path, 'matching:', mathching_to_string())
+  return res
 
 def get_matched_verticles(): 
   return res
@@ -264,7 +306,6 @@ def solution(l):
   init_blossum_params(n, graph)
 
   find_maximum_matching()
-
 
   return n - get_matched_verticles()
 
