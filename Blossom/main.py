@@ -1,7 +1,7 @@
 debug = False
 def printDebug(*args):
-  #if debug: print(args)
-  if debug: print(*args)
+  if debug: print(args)
+  #if debug: print(*args)
 
 def arePairs(a, b): 
   seen = set()
@@ -41,16 +41,18 @@ mate = {}
 blossom_verticles = None
 verticle_blossom = None
 blossom_index = None
+res = 0
 def init_blossom_params(_graph, _n): 
-  global blossom_verticles, blossom_verticles, blossom_index, verticle_blossom, n, m, mate, graph
+  global blossom_verticles, blossom_verticles, blossom_index, verticle_blossom, n, m, mate, graph, res
   n = _n
   graph = _graph
 
   m = int(3 * n / 2) # https://codeforces.com/blog/entry/92339
-  blossom_verticles = [False] * m
-  verticle_blossom = [-1 for _ in range(m)]
-  blossom_index = n
-  mate = {}
+  blossom_verticles = [False] * m # keeps verticles/inner blossoms that are contained in i-th blossom
+  verticle_blossom = [-1 for _ in range(m)] # keeps blossom index (i) of verticle at i-th position
+  blossom_index = n # next blossom index
+  mate = {} # matching is kept/updated in this dict
+  res = 0
 
 def build_graph(l):
   graph = {}
@@ -331,7 +333,6 @@ def mathching_to_string():
   return ', '.join(keys)
   
 
-res = 0
 def find_maximum_matching(_debug=False):
   global res, debug, blossom_index
 
