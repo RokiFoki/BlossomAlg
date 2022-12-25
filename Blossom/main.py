@@ -71,8 +71,8 @@ def build_graph(l):
 
 def get_depth(v): 
   c = 0
-  while p[v] != -1:
-    v = p[v]
+  while parent[v] != -1:
+    v = parent[v]
     c += 1
   
   return c
@@ -85,8 +85,8 @@ def reversed(list):
 def get_trace(v):
   trace = [v]
   r = v
-  while p[r] != -1:
-    r = p[r]
+  while parent[r] != -1:
+    r = parent[r]
     trace.append(r)
 
   return reversed(trace)
@@ -104,7 +104,7 @@ def contract(trace_1, trace_2):
   blossom_path_1 = trace_1[i:]
   blossom_path_2 = trace_2[i:]
   blossom_verticles[blossom_index] = blossom_path_1 + reversed(blossom_path_2)[:-1]
-  p[blossom_index] = p[v]
+  parent[blossom_index] = parent[v]
 
   # insert blossom in graph
   graph[blossom_index] = set()
@@ -147,38 +147,39 @@ def lift(path, b_index):
     diff = None
     k = len(blossom_verticles[b_index])
     if i % 2 == 0:
-      start = 0 # something, from outside is matched to it, or it's the first verticle (and it needs to be exposed)
+      start = 0 # something, from outside is matched to it, or it's the first verticle (and it needs to be exposed (the only non inner matched verticle in the blossom))
       
       if i + 1 < len(path):
         next_v = path[i+1]
         printDebug('lifting: next_v', next_v)
         for indx, blossom_verticle in enumerate(blossom_verticles[b_index]):
-          if next_v in graph[blossom_verticle] and indx != 0:
+          if next_v in graph[blossom_verticle] and indx != 0: # must be a inner matched edge. 0 edge is the only one that is not inner matched (can be matched only with outside)
             end = indx
             break
         else: 
-          end = 0
+          end = 0 # this is possible only if there is no verticles before blossom
           if len(lifted_path) > 0: printDebug('lifting: this should never happen (end) !!!!!!!')
       else:
-        end = 0
+        end = 0 # if there is no next verticle, after blossom, we need to end in exposed verticle
     else: 
-      # i is odd (blossom is matched to the next verticle, or there is no next verticle - either way, end is 0 (the only exposed verticle in the blossom))
+      # i is odd (blossom is matched to the next verticle, or there is no next verticle - either way, end is 0 (the only non inner matched verticle in the blossom))
       end = 0
 
-      # there is a node before
+      # there is a node before (i is odd and positive)
       prev_v = lifted_path[-1]
       printDebug('lifting: prev_v', prev_v)
       for indx, blossom_verticle in enumerate(blossom_verticles[b_index]):
-        if prev_v in graph[blossom_verticle] and indx != 0:
+        if prev_v in graph[blossom_verticle] and indx != 0: # must be a inner matched edge. 0 edge is the only one that is not inner matched (can be matched only with outside) - one exception (check the for else comment)
           start = indx
           break
       else:
-        start = 0
+        start = 0 # it is possible to be non inner matched edge, but then there should be no next verticle, and we need to end in an exposed verticle
         if i+1 < len(path): printDebug('lifting: this should never happen (start) !!!!!!!')
 
     if start == end: 
-      diff = 1
+      diff = 1 # can be anything as we will not enter the whle loop
     else:
+      # detect the direction, we need to pass the "matched" edge as the outside edge must be non matched in the aug path 
       path_important_node = blossom_verticles[b_index][end] if start == 0 else blossom_verticles[b_index][start]
       from_node_to_important_node = mate[path_important_node]
 
@@ -211,20 +212,19 @@ def lift(path, b_index):
   del graph[b_index]
 
   if b_index in mate:
-    mate[mate[b_index]] = blossom_verticles[b_index][0]
+    mate[mate[b_index]] = blossom_verticles[b_index][0] # 0 index verticle is the only non inner matched verticle
     del mate[b_index]
   
   return lifted_path
 
-p = None
+parent = None
 def find_augmenting_path(): 
-  global p
-  forest = set()
+  global parent
   forest_nodes = set()
-  q = []
-  verticles_marked = [0 for i in range(m)]
-  edges_marked = [[0 for j in range(m)] for i in range(m)]
-  p = [-1 for i in range(m)]
+  queue = []
+  verticles_marked = [0 for _ in range(m)]
+  edges_marked = [[0 for _ in range(m)] for _ in range(m)]
+  parent = [-1 for _ in range(m)]
 
   verticles_and_blossoms_n = blossom_index
   printDebug('verticle_blossom:', verticle_blossom)
@@ -236,15 +236,14 @@ def find_augmenting_path():
   for v in range(verticles_and_blossoms_n):
     if verticle_blossom[v] != -1: continue
     if v not in mate:
-      forest.add(v)
       forest_nodes.add(v)
-      q.append(v)
+      queue.append(v)
   
   i = 0
-  printDebug('\nextended verticles:', q)
-  #printDebug('graph:', graph )
-  while i < len(q): 
-    v = q[i]; i += 1
+  printDebug('\nextended verticles:', queue)
+  
+  while i < len(queue): 
+    v = queue[i]; i += 1
     printDebug('v:', v, '(extended verticle)')
 
     depth = get_depth(v) # probably not needed as q will always have only even odd depth verticles
@@ -261,8 +260,6 @@ def find_augmenting_path():
       if verticle_blossom[w] != -1: continue
 
       printDebug("w:", w, "(v's neighbour)")
-      while verticle_blossom[w] != -1: w = verticle_blossom[w]
-      printDebug("(w) finding its blossom if it is in one:", w)
 
       if edges_marked[v][w]: 
         printDebug("(w) edge was already processed")
@@ -272,18 +269,17 @@ def find_augmenting_path():
         printDebug("(w) it is not in a forest")
         x = mate[w]
 
-        p[w] = v
-        p[x] = w
+        parent[w] = v
+        parent[x] = w
         forest_nodes.add(w)
         forest_nodes.add(x)
 
         printDebug('updatedTreePath:', get_trace(x) if debug else None)
 
-        q.append(x) # only even ones need to be processed
+        queue.append(x) # only even ones need to be processed
       else:
         printDebug("(w) it is in the forest")
         if get_depth(w) % 2 == 1:
-          i += 1
           printDebug("(w) its depth is odd. Skipping")
           continue
         else:
@@ -301,7 +297,7 @@ def find_augmenting_path():
           else:
             printDebug('(v,w) have same root, contracting')
             blosum_id = contract(trace_v, trace_w)
-            # todo: new graph, new mates
+            
             path = find_augmenting_path()
             printDebug('(v,w) path after contraction:', path)
             
