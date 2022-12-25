@@ -1,26 +1,35 @@
-debug = True
+debug = False
 def printDebug(*args):
+  #if debug: print(args)
   if debug: print(*args)
 
 def arePairs(a, b): 
-  if (a+b) % 2 == 1: return True
-
   seen = set()
   
   low = min(a, b)
   high = max(a, b)
   while low != high:
+    if (low+high) % 2 == 1: return True
+    if (low+high) % 4 == 2: return low != high
+
     a2 = high - low
     b2 = low * 2
 
     low = min(a2, b2)
     high = max(a2, b2)
 
+    
     if low in seen: return True
     if high in seen: return True
 
+    if low % 2 == 0 and high % 2 == 0:
+      low = low / 2
+      high = high / 2
+      seen = set()
+
     seen.add(low)
     seen.add(high)
+ 
 
   return False
 
@@ -29,35 +38,33 @@ n = None
 m = None
 mate = {}
 
-blossum_verticles = None
-verticle_blossum = None
-blossum_index = None
-def init_blossum_params(_graph, _n): 
-  global blossum_verticles, blossum_verticles, blossum_index, verticle_blossum, n, m, mate, graph
+blossom_verticles = None
+verticle_blossom = None
+blossom_index = None
+def init_blossom_params(_graph, _n): 
+  global blossom_verticles, blossom_verticles, blossom_index, verticle_blossom, n, m, mate, graph
   n = _n
   graph = _graph
 
   m = int(3 * n / 2) # https://codeforces.com/blog/entry/92339
-  blossum_verticles = [False] * m
-  verticle_blossum = [-1 for _ in range(m)]
-  blossum_index = n
+  blossom_verticles = [False] * m
+  verticle_blossom = [-1 for _ in range(m)]
+  blossom_index = n
   mate = {}
 
 def build_graph(l):
   graph = {}
   n = len(l)
 
+  for i in range(n):
+    graph[i] = set();
+
   for i in range(n-1):
     for j in range(i+1, n):
       if arePairs(l[i], l[j]):
-        iSet = graph.get(i, set())
-        iSet.add(j)
-        graph[i] = iSet
-
-        jSet = graph.get(j, set())
-        jSet.add(i)
-        graph[j] = jSet
-  
+        graph[i].add(j)
+        graph[j].add(i)
+        
   return graph, n
 
 def get_depth(v): 
@@ -85,89 +92,125 @@ def get_trace(v):
 
 
 def contract(trace_1, trace_2):
-  global blossum_index
+  global blossom_index
   i = 0
-  while trace_1[i] == trace_2[i]: i += 1
+  while i < min(len(trace_1), len(trace_2)) and trace_1[i] == trace_2[i]: i += 1
   i -= 1
   
   v = trace_1[i]
 
-  blossum_path_1 = trace_1[i:]
-  blossum_path_2 = trace_2[i:]
-  blossum_verticles[blossum_index] = blossum_path_1 + blossum_path_2
-  reversed(blossum_path_2)[:-1] # test this
-  p[blossum_index] = p[v]
+  blossom_path_1 = trace_1[i:]
+  blossom_path_2 = trace_2[i:]
+  blossom_verticles[blossom_index] = blossom_path_1 + reversed(blossom_path_2)[:-1]
+  p[blossom_index] = p[v]
 
-  graph[blossum_index] = set()
-  for ver in blossum_verticles[blossum_index]:
-    verticle_blossum[ver] = blossum_index
+  # insert blossom in graph
+  graph[blossom_index] = set()
+  for ver in blossom_verticles[blossom_index]:
+    verticle_blossom[ver] = blossom_index
 
-    graph[blossum_index].update(graph[ver])
+    graph[blossom_index].update(graph[ver])
+
+  for ver in graph[blossom_index]:
+    graph[ver].add(blossom_index)
 
   if v in mate:
-    printDebug('updating match:', blossum_index, '->', mate[v])
-    mate[blossum_index] = mate[v]
-    mate[mate[v]] = blossum_index
+    printDebug('updating match:', blossom_index, '->', mate[v])
+    mate[blossom_index] = mate[v]
+    mate[mate[v]] = blossom_index
  
-  blossum_index += 1
+  blossom_index += 1
+
+  return blossom_index - 1
 
 
-def lift(path):
+def lift(path, b_index):
   printDebug('lifting: path', path)
   lifted_path = []
 
   i = 0
-  while len(path) - i >= 2:
-    z = path[i]
-    printDebug('lifting: checking', z)
-    if z < n: 
-      lifted_path.append(z)
-      printDebug('lifting: (not glossom) lifted_path', lifted_path)
+  while i < len(path):
+    v = path[i]
+    printDebug('lifting: checking', v)
+    if b_index != v: 
+      lifted_path.append(v)
+      printDebug('lifting: lifted_path', lifted_path)
       i += 1
       continue
 
-    b_index = z
-    w = path[i+1]
-    printDebug('lifting: (glossom):', blossum_verticles[b_index])
+    printDebug('lifting: (glossom):', blossom_verticles[b_index])
 
     start = None
     end = None
     diff = None
-    k = len(blossum_verticles[b_index])
-    if len(lifted_path) % 2 == 0:
-      for ver in blossum_verticles[b_index]:
-        if w in graph[ver]: # do I need check matching as well?
-          start = blossum_verticles[b_index].index(ver)
+    k = len(blossom_verticles[b_index])
+    if i % 2 == 0:
+      start = 0 # something, from outside is matched to it, or it's the first verticle (and it needs to be exposed)
       
+      if i + 1 < len(path):
+        next_v = path[i+1]
+        printDebug('lifting: next_v', next_v)
+        for indx, blossom_verticle in enumerate(blossom_verticles[b_index]):
+          if next_v in graph[blossom_verticle] and indx != 0:
+            end = indx
+            break
+        else: 
+          end = 0
+          if len(lifted_path) > 0: printDebug('lifting: this should never happen (end) !!!!!!!')
+      else:
+        end = 0
+    else: 
+      # i is odd (blossom is matched to the next verticle, or there is no next verticle - either way, end is 0 (the only exposed verticle in the blossom))
       end = 0
 
-      diff = 1 if start % 2 == 1 else k - 1
+      # there is a node before
+      prev_v = lifted_path[-1]
+      printDebug('lifting: prev_v', prev_v)
+      for indx, blossom_verticle in enumerate(blossom_verticles[b_index]):
+        if prev_v in graph[blossom_verticle] and indx != 0:
+          start = indx
+          break
+      else:
+        start = 0
+        if i+1 < len(path): printDebug('lifting: this should never happen (start) !!!!!!!')
+
+    if start == end: 
+      diff = 1
     else:
-      start = 0
+      path_important_node = blossom_verticles[b_index][end] if start == 0 else blossom_verticles[b_index][start]
+      from_node_to_important_node = mate[path_important_node]
 
-      for ver in blossum_verticles[b_index]:
-        if lifted_path[-1] in graph[ver]: # do I need check matching as well?
-          end = blossum_verticles[b_index].index(ver)
+      printDebug('lifting: from_node_to_important_node', from_node_to_important_node, 'important_node', path_important_node)
 
-      diff = 1 if end % 2 == 1 else k - 1
-
-    printDebug('lifting: z:', z, 'start:', start, 'end:', end, 'diff:', diff)
- 
-    k = len(blossum_verticles[b_index])
+      _diff = blossom_verticles[b_index].index(path_important_node) - blossom_verticles[b_index].index(from_node_to_important_node)
+      diff = (1 if start == 0 else -1) * _diff  + k
+    
+    printDebug('lifting: b_index:', b_index, 'start:', start, 'end:', end, 'diff:', diff)
+    
     while start != end:
-      printDebug('lifting: adding', blossum_verticles[b_index][start])
-      path.append(blossum_verticles[b_index][start])
+      printDebug('lifting: adding', blossom_verticles[b_index][start])
+      lifted_path.append(blossom_verticles[b_index][start])
       start = (start + diff) % k
-      
-    path.append(blossum_verticles[b_index][start])
+    
+    printDebug('lifting: adding', blossom_verticles[b_index][start])  
+    lifted_path.append(blossom_verticles[b_index][start])
 
     printDebug('lifting: (glossom) lifted_path', lifted_path, 'path:', path)
 
-    if b_index in mate: # do we need it
-      mate[mate[b_index]] = blossum_verticles[b_index][0] # do we need it
-    # do we need to reduce the blossum_index?
-   
     i += 1
+
+  # remove blossom from graph
+  for ver in blossom_verticles[b_index]:
+    verticle_blossom[ver] = -1
+
+  for ver in graph[b_index]:
+    graph[ver].remove(b_index)
+
+  del graph[b_index]
+
+  if b_index in mate:
+    mate[mate[b_index]] = blossom_verticles[b_index][0]
+    del mate[b_index]
   
   return lifted_path
 
@@ -181,13 +224,15 @@ def find_augmenting_path():
   edges_marked = [[0 for j in range(m)] for i in range(m)]
   p = [-1 for i in range(m)]
 
-  verticles_and_blossoms_n = blossum_index
+  verticles_and_blossoms_n = blossom_index
+  printDebug('verticle_blossom:', verticle_blossom)
   for v in range(verticles_and_blossoms_n):
     if v in mate:
       edges_marked[v][mate[v]] = 1 
       edges_marked[mate[v]][v] = 1 
 
   for v in range(verticles_and_blossoms_n):
+    if verticle_blossom[v] != -1: continue
     if v not in mate:
       forest.add(v)
       forest_nodes.add(v)
@@ -195,6 +240,7 @@ def find_augmenting_path():
   
   i = 0
   printDebug('\nextended verticles:', q)
+  #printDebug('graph:', graph )
   while i < len(q): 
     v = q[i]; i += 1
     printDebug('v:', v, '(extended verticle)')
@@ -210,9 +256,11 @@ def find_augmenting_path():
       neighbours.sort()
 
     for w in neighbours:
+      if verticle_blossom[w] != -1: continue
+
       printDebug("w:", w, "(v's neighbour)")
-      while verticle_blossum[w] != -1: w = verticle_blossum[w]
-      printDebug("(w) finding its blossum if it is in one:", w)
+      while verticle_blossom[w] != -1: w = verticle_blossom[w]
+      printDebug("(w) finding its blossom if it is in one:", w)
 
       if edges_marked[v][w]: 
         printDebug("(w) edge was already processed")
@@ -250,12 +298,12 @@ def find_augmenting_path():
             return path
           else:
             printDebug('(v,w) have same root, contracting')
-            contract(trace_v, trace_w)
+            blosum_id = contract(trace_v, trace_w)
             # todo: new graph, new mates
             path = find_augmenting_path()
             printDebug('(v,w) path after contraction:', path)
             
-            return lift(path)
+            return lift(path, blosum_id)
       
       edges_marked[v][w] = edges_marked[w][v] = 1
     
@@ -285,7 +333,7 @@ def mathching_to_string():
 
 res = 0
 def find_maximum_matching(_debug=False):
-  global res, debug
+  global res, debug, blossom_index
 
   debug = _debug
   path = find_augmenting_path()
@@ -293,6 +341,8 @@ def find_maximum_matching(_debug=False):
     augment(path)
     printDebug('new matching:', mathching_to_string())
     res += 2
+
+    blossom_index = n
     return find_maximum_matching(_debug)
   
   printDebug('no path found:', path, 'matching:', mathching_to_string())
@@ -301,14 +351,10 @@ def find_maximum_matching(_debug=False):
 def get_matched_verticles(): 
   return res
 
-def solution(l):
+def solution(l, _debug=False):
   graph, n = build_graph(l)
-  init_blossum_params(n, graph)
+  init_blossom_params(graph, n)
 
-  find_maximum_matching()
+  find_maximum_matching(_debug)
 
   return n - get_matched_verticles()
-
-
-
-
